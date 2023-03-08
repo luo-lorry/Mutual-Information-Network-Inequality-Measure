@@ -130,3 +130,77 @@ def plot_measure_correlation(aas, das, I1s, name="I1", order=1.3, savefig=False,
         return np.corrcoef(np.abs(aas), I1s)[0, 1]
     
 
+
+## SPSA
+def Loss(parameters, Y, order=1.3):
+    length = int(np.sqrt(len(theta)))
+    
+    # choose edge addition using softmax
+    addendum = np.random.choice(length**2, size=10, p=softmax(parameters))
+    row, col = np.unravel_index(addendum, (length, length))
+    
+    comat_new = comat_full.copy()
+    comat_new[row, col] += 1
+    comat_new[col, row] += 1
+    Y_new, _, _ = MI_JDAM(comat_new, order=order)
+     
+    # how much the MI increases
+    L = Y_new - Y
+    return L
+    
+    
+def initialize_hyperparameters(alpha, lossFunction, w0, N_iterations):
+ 
+    c = 1e-1   # a small number
+ 
+    # A is <= 10% of the number of iterations
+    A = N_iterations*0.1
+ 
+    a = 1000000
+ 
+    return a, A, c
+    
+    
+def grad(L, w, ck):
+     
+    # number of parameters
+    p = len(w)
+     
+    # bernoulli-like distribution
+    deltak = np.random.choice([-1, 1], size=p)
+     
+    # simultaneous perturbations
+    ck_deltak = ck * deltak
+ 
+    # gradient approximation
+    DELTA_L = L(w + ck_deltak) - L(w - ck_deltak)
+ 
+    return (DELTA_L) / (2 * ck_deltak)
+
+
+def SPSA(LossFunction, parameters, alpha=0.602,\
+         gamma=0.101, N_iterations=int(1e4)):
+     
+    # model's parameters
+    w = parameters
+ 
+    a, A, c = initialize_hyperparameters(
+      alpha, LossFunction, w, N_iterations)
+    
+    loss_history = np.zeros(N_iterations-1, dtype=float)
+    for k in range(1, N_iterations):
+        loss_history[k-1] = LossFunction(w)
+        if k % 5 == 1:
+            print(f"-------- iteration {k}: loss {loss_history[k-1]}; parameter {w.flatten()[:5]} ----------")
+        # update ak and ck
+        ak = a/((k+A)**(alpha))
+        ck = c/(k**(gamma))
+ 
+        # estimate gradient
+        gk = grad(LossFunction, w, ck)
+ 
+        # update parameters
+        w -= ak*gk
+ 
+    return w, loss_history
+    
